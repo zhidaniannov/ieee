@@ -4,9 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Participant;
-use App\Models\Permohonan;
-use App\Models\Task;
 use App\Models\User;
+use App\Models\Attendance;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
@@ -15,14 +14,19 @@ class DashboardController extends Controller
 {
     public function index(): View
     {
+        // =====================
+        // BASIC STATISTICS
+        // =====================
 
         $totalPemagang = Participant::count();
-        $permohonanPending = Permohonan::where('status', 'Proses')->count();
-        $totalPenugasan = Task::count();
-        $totalPengguna = User::count();
+        $totalAdmin = User::where('role', 'admin')->count();
+        $totalAbsensiHariIni = Attendance::whereDate('date', Carbon::today())->count();
 
-        $hour = Carbon::now()->setTimezone('Asia/Jakarta')->hour;
-        $greeting = '';
+        // =====================
+        // GREETING
+        // =====================
+
+        $hour = Carbon::now('Asia/Jakarta')->hour;
 
         if ($hour >= 5 && $hour < 12) {
             $greeting = 'Selamat Pagi';
@@ -34,52 +38,36 @@ class DashboardController extends Controller
             $greeting = 'Selamat Malam';
         }
 
+        // =====================
+        // GENDER CHART
+        // =====================
+
         $genderCounts = Participant::query()
             ->select('jenis_kelamin', DB::raw('count(*) as total'))
             ->groupBy('jenis_kelamin')
-            ->pluck('total', 'jenis_kelamin'); // Hasilnya: ['Laki-laki' => 10, 'Perempuan' => 15]
+            ->pluck('total', 'jenis_kelamin');
 
-        $transformedGenderCounts = $genderCounts->mapWithKeys(function ($total, $gender) {
-            $label = ($gender === 'L') ? 'Laki-laki' : 'Perempuan';
-
-            return [$label => $total];
-        }); // Hasilnya: collect(['Laki-laki' => 10, 'Perempuan' => 15])
-
-        // Siapkan data agar mudah dibaca oleh ApexCharts
         $genderChartData = [
-            'labels' => $transformedGenderCounts->keys(), // -> ['Laki-laki', 'Perempuan']
-            'series' => $transformedGenderCounts->values(), // -> [10, 15]
+            'labels' => [
+                'Laki-laki',
+                'Perempuan'
+            ],
+            'series' => [
+                $genderCounts->get('L', 0),
+                $genderCounts->get('P', 0),
+            ],
         ];
 
-        $participantStatusCounts = Participant::query()
-            ->select('status', DB::raw('count(*) as total'))
-            ->groupBy('status')
-            ->pluck('total', 'status');
+        // =====================
+        // RETURN VIEW
+        // =====================
 
-        $aktifCount = $participantStatusCounts->get('approved', 0);
-        // Gabungkan 'pending' dan 'rejected' menjadi 'Tidak Aktif'
-        $tidakAktifCount = $participantStatusCounts->get('nonactive', 0) + $participantStatusCounts->get('rejected', 0);
-
-        $participantStatusChartData = [
-            'labels' => ['Aktif', 'Tidak Aktif'],
-            'series' => [$aktifCount, $tidakAktifCount],
-        ];
-
-        $permohonanCounts = Permohonan::query()
-            // Hubungkan tabel permohonan dengan institutes berdasarkan id_institute
-            ->join('institutes', 'permohonan.id_institute', '=', 'institutes.id')
-            ->select('institutes.nama_instansi', DB::raw('count(permohonan.id) as total'))
-            ->groupBy('institutes.nama_instansi')
-            ->orderBy('total', 'desc')
-            ->take(5) // Ambil 5 instansi dengan permohonan terbanyak
-            ->pluck('total', 'nama_instansi');
-
-        // Siapkan data agar mudah dibaca oleh ApexCharts
-        $permohonanChartData = [
-            'labels' => $permohonanCounts->keys(),
-            'series' => $permohonanCounts->values(),
-        ];
-
-        return view('admin.dashboard.index', compact('totalPemagang', 'permohonanPending', 'totalPenugasan', 'totalPengguna', 'greeting', 'genderChartData', 'permohonanChartData', 'participantStatusChartData'));
+        return view('admin.dashboard.index', compact(
+            'totalPemagang',
+            'totalAdmin',
+            'totalAbsensiHariIni',
+            'greeting',
+            'genderChartData'
+        ));
     }
 }

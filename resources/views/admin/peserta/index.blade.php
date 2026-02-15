@@ -93,16 +93,6 @@
                     </div>
                 </div>
 
-                {{-- Export Button --}}
-                <div class="d-flex flex-wrap gap-3 mb-2">
-                    <button id="btnExportExcel" type="button" class="btn btn-success">
-                        <i class="fas fa-file-excel me-1"></i> Excel
-                    </button>
-                    <button id="btnExportPdf" type="button" class="btn btn-danger">
-                        <i class="fas fa-file-pdf me-1"></i> PDF
-                    </button>
-                </div>
-
                 <!-- Tabel -->
                 <table id="participants-table" class="display table table-striped table-hover align-middle"
                     style="width:100%">
@@ -443,16 +433,6 @@
                     search: $('#searchbox').val() || ''
                 });
             }
-
-            $('#btnExportExcel').off('click').on('click', function() {
-                const qs = buildQuery();
-                window.location = "{{ route('admin.peserta.export.excel') }}" + (qs ? ('?' + qs) : '');
-            });
-
-            $('#btnExportPdf').off('click').on('click', function() {
-                const qs = buildQuery();
-                window.location = "{{ route('admin.peserta.export.pdf') }}" + (qs ? ('?' + qs) : '');
-            });
         });
     </script>
 @endsection

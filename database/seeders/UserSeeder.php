@@ -22,5 +22,14 @@ class UserSeeder extends Seeder
             'role' => 'admin',
             'status' => 'active',
         ]);
+        User::create([
+            'name' => 'Pemagang Contoh',
+            'nip' => null,
+            'nisnim' => '1234567890',
+            'email' => 'pemagang@magang.com',
+            'password' => Hash::make('123123123'),
+            'role' => 'pemagang',
+            'status' => 'active',
+        ]);
     }
 }

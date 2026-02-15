@@ -20,8 +20,6 @@ class DatabaseSeeder extends Seeder
 
         // Seeder lain
         $this->call([
-            InstituteSeeder::class,
-            SupervisorSeeder::class,  // akan membuat user2 dengan role 'pembimbing'
             ParticipantSeeder::class,
             UserSeeder::class,
         ]);

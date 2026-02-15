@@ -2,9 +2,12 @@
     @section('title', 'Login')
 
     <div class="text-center">
-        <h1 class="h4 text-gray-900 mb-4">Selamat Datang Kembali!</h1>
+        <h1 class="h4 text-gray-900 mb-4">
+            Selamat Datang Kembali!
+        </h1>
     </div>
 
+    {{-- Success Alert --}}
     @if (session('success'))
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script>
@@ -18,6 +21,7 @@
         </script>
     @endif
 
+    {{-- Error Alert --}}
     @if ($errors->any())
         <div class="alert alert-danger mb-4">
             <ul class="mb-0">
@@ -31,34 +35,54 @@
     <form class="user" method="POST" action="{{ route('login') }}">
         @csrf
 
+        {{-- Identifier (Email / NIM / dll) --}}
         <div class="form-group">
-            <input type="text" class="form-control form-control-user" id="identifier" name="identifier"
-                value="{{ old('identifier') }}" required autofocus placeholder="Masukkan NIM/NIS/NIP/Email...">
+            <input type="text"
+                   class="form-control form-control-user"
+                   name="identifier"
+                   value="{{ old('identifier') }}"
+                   required
+                   autofocus
+                   placeholder="Masukkan NIM/NIS/NIP/Email...">
         </div>
 
+        {{-- Password --}}
         <div class="form-group">
-            <input type="password" class="form-control form-control-user" id="password" name="password" required
-                placeholder="Password">
+            <input type="password"
+                   class="form-control form-control-user"
+                   name="password"
+                   required
+                   placeholder="Password">
         </div>
 
+        {{-- Remember Me --}}
         <div class="form-group">
             <div class="custom-control custom-checkbox small">
-                <input type="checkbox" class="custom-control-input" id="remember_me" name="remember">
-                <label class="custom-control-label" for="remember_me">Ingat Saya</label>
+                <input type="checkbox"
+                       class="custom-control-input"
+                       id="remember_me"
+                       name="remember">
+                <label class="custom-control-label" for="remember_me">
+                    Ingat Saya
+                </label>
             </div>
         </div>
 
+        {{-- Submit --}}
         <button type="submit" class="btn btn-primary btn-user btn-block">
             Login
         </button>
     </form>
+
     <hr>
+
+    {{-- Forgot Password --}}
     <div class="text-center">
         @if (Route::has('password.request'))
-            <a class="small" href="{{ route('password.request') }}">Lupa Password?</a>
+            <a class="small" href="{{ route('password.request') }}">
+                Lupa Password?
+            </a>
         @endif
     </div>
-    <div class="text-center">
-        <a class="small" href="{{ route('participant.register') }}">Buat Akun (Untuk pemagang)</a>
-    </div>
+
 </x-guest-layout>

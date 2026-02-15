@@ -2,262 +2,210 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Exports\Participant\AttendancesExport;
-use App\Exports\Participant\LogbooksExport;
-use App\Exports\ParticipantsExport;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreParticipantController;
-use App\Http\Requests\UpdateParticipantRequest;
-use App\Models\Institute; // Import the Institute model
 use App\Models\Participant;
-use Barryvdh\DomPDF\Facade\Pdf;
-use Illuminate\Http\RedirectResponse;
+use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
-use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Hash;
 use Yajra\DataTables\Facades\DataTables;
 
 class ParticipantController extends Controller
 {
-    public function index(): View
+    /*
+    |--------------------------------------------------------------------------
+    | INDEX
+    |--------------------------------------------------------------------------
+    */
+    public function index()
     {
-        $stats = [
-            'total' => Participant::count(),
-            'laki_laki' => Participant::where('jenis_kelamin', 'L')->count(),
-            'perempuan' => Participant::where('jenis_kelamin', 'P')->count(),
-        ];
-
-        $years = Participant::whereNotNull('tahun_aktif')
-            ->select('tahun_aktif')
-            ->distinct()
-            ->orderByDesc('tahun_aktif')
-            ->pluck('tahun_aktif');
-
-        return view('admin.peserta.index', compact('stats', 'years'));
+        return view('admin.peserta.index');
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | DATATABLES
+    |--------------------------------------------------------------------------
+    */
     public function data(Request $request)
     {
-        $query = Participant::query();
-
-        if ($request->filled('jenis_kelamin')) {
-            $query->where('jenis_kelamin', $request->jenis_kelamin);
-        }
-
-        if ($request->filled('tahun_aktif')) {
-            $query->where('tahun_aktif', (int) $request->tahun_aktif);
-        }
+        $query = Participant::with('user'); // WAJIB ADA
 
         if ($request->filled('searchbox')) {
             $search = $request->searchbox;
+
             $query->where(function ($q) use ($search) {
                 $q->where('nama', 'like', "%{$search}%")
-                    ->orWhere('nisnim', 'like', "%{$search}%")
-                    ->orWhere('jurusan', 'like', "%{$search}%")
-                    ->orWhere('kontak_peserta', 'like', "%{$search}%")
-                    ->orWhere('tahun_aktif', 'like', "%{$search}%");
+                ->orWhere('nisnim', 'like', "%{$search}%")
+                ->orWhere('jurusan', 'like', "%{$search}%");
             });
         }
 
         return DataTables::of($query)
             ->addIndexColumn()
-            ->addColumn('actions', function ($p) {
-                $buttons = "
-                    <div class='flex gap-2'>
-                    <a href='".route('admin.peserta.edit', $p->id)."'
-                       class='btn btn-sm btn-primary text-white'
-                       title='Edit'>
-                        <i class='fa-solid fa-pen-to-square'></i> Edit
-                    </a>
-                    <a href='".route('admin.peserta.show', $p->id)."'
-                       class='btn btn-sm btn-info text-white'
-                       title='Detail'>
-                        <i class='fa-solid fa-eye'></i> Detail
-                    </a>";
-                if ($p->status !== 'approved') {
-                    $buttons .= "
-                    <a href='".route('admin.peserta.approve', $p->id)."'
-                       class='btn btn-sm btn-success text-white'
-                       title='Setujui'>
-                        <i class='fa-solid fa-check'></i> Setujui
-                    </a>";
-                }
-                $buttons .= '</div>';
+            ->addColumn('actions', function ($participant) {
+                return '
+                    <div class="flex gap-2">
+                        <a href="'.route('admin.peserta.show', $participant).'"
+                        class="px-3 py-1 bg-green-500 text-white rounded text-sm">
+                            Detail
+                        </a>
 
-                return $buttons;
+                        <a href="'.route('admin.peserta.edit', $participant).'"
+                        class="px-3 py-1 bg-blue-500 text-white rounded text-sm">
+                            Edit
+                        </a>
+
+                        <form action="'.route('admin.peserta.destroy', $participant).'"
+                            method="POST"
+                            onsubmit="return confirm(\'Yakin hapus?\')">
+                            '.csrf_field().'
+                            '.method_field('DELETE').'
+                            <button type="submit"
+                                class="px-3 py-1 bg-red-500 text-white rounded text-sm">
+                                Hapus
+                            </button>
+                        </form>
+                    </div>
+                ';
             })
             ->rawColumns(['actions'])
             ->make(true);
     }
 
-    public function show(Participant $participant): View
+
+    /*
+    |--------------------------------------------------------------------------
+    | CREATE
+    |--------------------------------------------------------------------------
+    */
+    public function create()
     {
-        // muat relasi untuk tab logbook & absensi (urut terbaru)
-        $participant->load([
-            'institute',
-            'logbooks' => fn ($q) => $q->orderByDesc('date')->orderByDesc('id'),
-            'attendances' => fn ($q) => $q->orderByDesc('date')->orderByDesc('id'),
+
+        return view('admin.peserta.create');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | STORE
+    |--------------------------------------------------------------------------
+    */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'nama' => 'required|string|max:100',
+            'nik' => 'required|string|max:16',
+            'nisnim' => 'nullable|unique:participants,nisnim',
+            'jenis_kelamin' => 'required|in:L,P',
+            'jurusan' => 'nullable|string|max:100',
+            'kontak_peserta' => 'nullable|string|max:20',
+            'tahun_aktif' => 'required|digits:4',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|min:6',
         ]);
 
+        // Create user login
+        $user = User::create([
+            'name' => $request->nama,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'role' => 'pemagang',
+        ]);
+
+        // Create participant
+        Participant::create([
+            'user_id' => $user->id,
+            'nama' => $request->nama,
+            'nik' => $request->nik,
+            'nisnim' => $request->nisnim,
+            'jenis_kelamin' => $request->jenis_kelamin,
+            'jurusan' => $request->jurusan,
+            'kontak_peserta' => $request->kontak_peserta,
+            'tahun_aktif' => $request->tahun_aktif,
+            'keterangan' => $request->keterangan,
+            'status' => 'active'
+        ]);
+
+        return redirect()
+            ->route('admin.peserta.index')
+            ->with('success', 'Peserta berhasil ditambahkan.');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | SHOW
+    |--------------------------------------------------------------------------
+    */
+    public function show(Participant $participant)
+    {
         return view('admin.peserta.detail', compact('participant'));
     }
 
-    public function create()
+    /*
+    |--------------------------------------------------------------------------
+    | EDIT
+    |--------------------------------------------------------------------------
+    */
+    public function edit(Participant $participant)
     {
-        $institutes = Institute::all(); // Fetch all institutes
 
-        return view('admin.peserta.create', compact('institutes'));
+        return view('admin.peserta.edit', compact('participant'));
     }
 
-    public function store(StoreParticipantController $request): RedirectResponse
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE
+    |--------------------------------------------------------------------------
+    */
+    public function update(Request $request, Participant $participant)
     {
-        $data = $request->validated();
+        $request->validate([
+            'nama' => 'required|string|max:100',
+            'nik' => 'required|string|max:16',
+            'nisnim' => 'nullable|unique:participants,nisnim,' . $participant->id,
+            'jenis_kelamin' => 'required|in:L,P',
+            'jurusan' => 'nullable|string|max:100',
+            'kontak_peserta' => 'nullable|string|max:20',
+            'tahun_aktif' => 'required|digits:4',
+        ]);
 
-        if (! empty($data['permohonan_id'])) {
-            $permohonan = \App\Models\Permohonan::find($data['permohonan_id']);
-            if ($permohonan) {
-                $data['institute_id'] = $permohonan->id_institute;
-            }
-        }
+        $participant->update([
+            'nama' => $request->nama,
+            'nik' => $request->nik,
+            'nisnim' => $request->nisnim,
+            'jenis_kelamin' => $request->jenis_kelamin,
+            'jurusan' => $request->jurusan,
+            'kontak_peserta' => $request->kontak_peserta,
+            'tahun_aktif' => $request->tahun_aktif,
+            'keterangan' => $request->keterangan,
+        ]);
 
-        $participant = Participant::create($data);
-
-        $internship = \App\Models\Internship::where('id_permohonan', $data['permohonan_id'])->first();
-        if ($internship) {
-            if (! $internship->participants()->where('participants.id', $participant->id)->exists()) {
-                $internship->participants()->attach($participant->id);
-            }
+        // Update nama user login juga
+        if ($participant->user) {
+            $participant->user->update([
+                'name' => $request->nama,
+            ]);
         }
 
         return redirect()
             ->route('admin.peserta.index')
-            ->with('sukses', 'Peserta berhasil ditambahkan.');
+            ->with('success', 'Data berhasil diperbarui.');
     }
 
-    public function edit(Participant $participant): View
+    /*
+    |--------------------------------------------------------------------------
+    | DESTROY
+    |--------------------------------------------------------------------------
+    */
+    public function destroy(Participant $participant)
     {
-        $institutes = Institute::all(); // Fetch all institutes
-
-        return view('admin.peserta.edit', compact('participant', 'institutes'));
-    }
-
-    public function update(UpdateParticipantRequest $request, Participant $participant): RedirectResponse
-    {
-        $participant->update($request->validated());
-
-        return redirect()->route('admin.peserta.index')->with('sukses', 'Data berhasil diperbarui');
-    }
-
-    // ===== Export list peserta (sudah ada) =====
-    public function exportExcel(Request $request)
-    {
-        $filename = 'peserta_'.now()->format('Ymd_His').'.xlsx';
-
-        return Excel::download(new ParticipantsExport($request), $filename);
-    }
-
-    public function exportPdf(Request $request)
-    {
-        $q = Participant::query();
-
-        $gender = $request->get('jenis_kelamin');
-        $year = $request->get('tahun_aktif');
-        $search = $request->get('search');
-
-        if ($gender) {
-            $q->where('jenis_kelamin', $gender);
-        }
-        if ($year) {
-            $q->where('tahun_aktif', (int) $year);
-        }
-        if ($search) {
-            $q->where(function ($x) use ($search) {
-                $x->where('nama', 'like', "%{$search}%")
-                    ->orWhere('nisnim', 'like', "%{$search}%")
-                    ->orWhere('jurusan', 'like', "%{$search}%")
-                    ->orWhere('kontak_peserta', 'like', "%{$search}%")
-                    ->orWhere('tahun_aktif', 'like', "%{$search}%");
-            });
+        if ($participant->user) {
+            $participant->user->delete();
         }
 
-        $data = $q->orderBy('nama')->get();
+        $participant->delete();
 
-        $subtitle = [];
-        if ($gender) {
-            $subtitle[] = 'Jenis kelamin: '.($gender === 'L' ? 'Laki-laki' : 'Perempuan');
-        }
-        if ($year) {
-            $subtitle[] = 'Tahun aktif: '.$year;
-        }
-        if ($search) {
-            $subtitle[] = 'Pencarian: "'.$search.'"';
-        }
-        $subtitle = implode(' · ', $subtitle);
-
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('admin.peserta.pdf', compact('data', 'subtitle'))
-            ->setPaper('a4', 'portrait');
-
-        return $pdf->download('peserta_'.now()->format('Ymd_His').'.pdf');
-    }
-
-    // ====== NEW: Export riwayat logbook / absensi untuk satu peserta ======
-    public function exportLogbookExcel(Participant $participant)
-    {
-        $filename = 'logbook_'.$participant->id.'_'.now()->format('Ymd_His').'.xlsx';
-
-        return Excel::download(new LogbooksExport($participant), $filename);
-    }
-
-    public function exportLogbookPdf(Participant $participant)
-    {
-        $participant->load(['logbooks' => fn ($q) => $q->orderByDesc('date')->orderByDesc('id')]);
-
-        $pdf = Pdf::loadView('admin.peserta.exports.logbook_pdf', [
-            'participant' => $participant,
-            'logbooks' => $participant->logbooks,
-        ])->setPaper('a4', 'portrait');
-
-        return $pdf->download('logbook_'.$participant->id.'_'.now()->format('Ymd_His').'.pdf');
-    }
-
-    public function exportAttendanceExcel(Participant $participant)
-    {
-        $filename = 'absensi_'.$participant->id.'_'.now()->format('Ymd_His').'.xlsx';
-
-        return Excel::download(new AttendancesExport($participant), $filename);
-    }
-
-    public function exportAttendancePdf(\App\Models\Participant $participant)
-    {
-        $attendances = $participant->attendances()
-            ->orderByDesc('date')
-            ->get([
-                'date',
-                'status',
-                'note',
-                'check_in_time',
-                'check_out_time',
-                'check_in_ip_address',
-                'check_out_ip_address',
-            ]);
-
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('admin.peserta.exports.attendance_pdf', [
-            'participant' => $participant,
-            'attendances' => $attendances,
-        ])->setPaper('a4', 'portrait');
-
-        return $pdf->download('absensi_'.$participant->id.'_'.now()->format('Ymd_His').'.pdf');
-    }
-
-    public function approve(Participant $participant, \App\Services\ParticipantService $service): RedirectResponse
-    {
-        try {
-            $password = $service->approveParticipant($participant);
-            $message = "Peserta {$participant->nama} berhasil disetujui. Akun telah dibuat. Password sementara: {$password}";
-
-            return redirect()->route('admin.peserta.index')->with('success', $message);
-        } catch (\Exception $e) {
-            return redirect()->route('admin.peserta.index')->with('error', $e->getMessage());
-        }
+        return redirect()
+            ->route('admin.peserta.index')
+            ->with('success', 'Peserta berhasil dihapus.');
     }
 }

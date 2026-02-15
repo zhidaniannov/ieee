@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('email')->unique()->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->enum('role', ['admin', 'atasan', 'pembimbing', 'pemagang'])->default('admin');
+            $table->enum('role', ['admin', 'pemagang'])->default('pemagang');
             $table->enum('status', ['active', 'inactive'])->default('active');
             $table->boolean('profile_completed')->default(false);
             $table->rememberToken();
